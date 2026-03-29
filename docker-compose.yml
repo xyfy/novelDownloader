@@ -1,0 +1,67 @@
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASS}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASS}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "${DB_USER}", "-p${DB_PASS}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  crawler:
+    image: node:20-alpine
+    working_dir: /app
+    command: ["sh", "-c", "npm install && node index.js --site txt520 --pages all"]
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      PENDING_DIR: /data/downloads/pending
+    volumes:
+      - ./crawler:/app
+      - ./data/downloads:/data/downloads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    profiles:
+      - full
+
+  parser:
+    image: python:3.11-slim
+    working_dir: /app
+    command: ["sh", "-c", "pip install -r requirements.txt && python main.py"]
+    environment:
+      DB_HOST: mysql
+      DB_PORT: "3306"
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASS: ${DB_PASS}
+      PENDING_DIR: /data/downloads/pending
+      PROCESSING_DIR: /data/downloads/processing
+      DONE_DIR: /data/downloads/done
+      FAILED_DIR: /data/downloads/failed
+    volumes:
+      - ./parser:/app
+      - ./data/downloads:/data/downloads
+    depends_on:
+      mysql:
+        condition: service_healthy
+    profiles:
+      - full
+
+volumes:
+  mysql_data:

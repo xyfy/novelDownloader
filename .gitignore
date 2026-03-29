@@ -1,0 +1,35 @@
+# Environment
+.env
+
+# Node.js
+crawler/node_modules/
+crawler/package-lock.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+parser/__pycache__/
+parser/src/__pycache__/
+parser/models/__pycache__/
+parser/scripts/__pycache__/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Data (downloaded files and SQLite DB)
+data/downloads/pending/*.txt
+data/downloads/pending/*.meta.json
+data/downloads/processing/
+data/downloads/done/
+data/downloads/failed/
+data/crawler_tasks.db
+data/logs/
+
+# OS
+.DS_Store
+Thumbs.db
