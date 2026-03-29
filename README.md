@@ -16,11 +16,51 @@
 | Node.js | ≥ 20 |
 | Python | ≥ 3.11 |
 | MySQL | 8 |
-| Docker + Compose | 可选，推荐 |
+| Docker + Compose | ≥ 2.0，推荐 |
 
 ---
 
-## 快速开始（5 步）
+## Docker 快速开始（推荐）
+
+> 需要安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 或 Docker Engine + Compose 插件。
+
+```bash
+# 1. 克隆并进入项目
+git clone https://github.com/xyfy/novelDownloader.git
+cd novelDownloader
+
+# 2. 复制并填写环境变量
+cp .env.example .env
+# 编辑 .env：至少填写 DB_PASS
+
+# 3. 一键启动全部服务（MySQL + 爬虫 + 解析层）
+docker compose --profile full up --build -d
+
+# 查看运行日志
+docker compose --profile full logs -f
+```
+
+首次运行会自动构建镜像并初始化 MySQL 表结构（通过 `sql/init.sql`）。
+
+**常用命令：**
+
+```bash
+# 仅启动 MySQL（手动运行爬虫/解析层时）
+docker compose up mysql -d
+
+# 单独启动解析层
+docker compose --profile full up parser -d
+
+# 停止并清理容器（保留数据卷）
+docker compose --profile full down
+
+# 停止并同时删除数据卷（重置数据库）
+docker compose --profile full down -v
+```
+
+---
+
+## 本地手动运行（5 步）
 
 ```bash
 # 1. 克隆并进入项目

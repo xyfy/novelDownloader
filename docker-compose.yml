@@ -21,9 +21,9 @@ services:
       retries: 5
 
   crawler:
-    image: node:20-alpine
-    working_dir: /app
-    command: ["sh", "-c", "npm install && node index.js --site txt520 --pages all"]
+    build:
+      context: ./crawler
+      dockerfile: Dockerfile
     environment:
       DB_HOST: mysql
       DB_PORT: "3306"
@@ -31,9 +31,12 @@ services:
       DB_USER: ${DB_USER}
       DB_PASS: ${DB_PASS}
       PENDING_DIR: /data/downloads/pending
+      SQLITE_PATH: /data/crawler_tasks.db
+      CRAWLER_CONCURRENCY: ${CRAWLER_CONCURRENCY:-2}
+      CRAWLER_REQUEST_INTERVAL_MS: ${CRAWLER_REQUEST_INTERVAL_MS:-3000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     volumes:
-      - ./crawler:/app
-      - ./data/downloads:/data/downloads
+      - ./data:/data
     depends_on:
       mysql:
         condition: service_healthy
@@ -41,9 +44,9 @@ services:
       - full
 
   parser:
-    image: python:3.11-slim
-    working_dir: /app
-    command: ["sh", "-c", "pip install -r requirements.txt && python main.py"]
+    build:
+      context: .
+      dockerfile: parser/Dockerfile
     environment:
       DB_HOST: mysql
       DB_PORT: "3306"
@@ -54,8 +57,9 @@ services:
       PROCESSING_DIR: /data/downloads/processing
       DONE_DIR: /data/downloads/done
       FAILED_DIR: /data/downloads/failed
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      WATCHER_POLL_INTERVAL: ${WATCHER_POLL_INTERVAL:-5}
     volumes:
-      - ./parser:/app
       - ./data/downloads:/data/downloads
     depends_on:
       mysql:
