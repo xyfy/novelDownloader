@@ -33,7 +33,7 @@ class BaseSiteAdapter {
    *
    * @param {import('cheerio').CheerioAPI} $  - Loaded cheerio instance.
    * @param {string} url                       - URL of the page being parsed.
-   * @returns {{ id: string, detailUrl: string, title: string, category?: string }[]}
+   * @returns {{ id: string, detailUrl: string, title: string, category?: string, lastUpdated?: string|null }[]}
    */
   // eslint-disable-next-line no-unused-vars
   parseListPage($, url) {
@@ -51,7 +51,8 @@ class BaseSiteAdapter {
    *   category?: string,
    *   summary?: string,
    *   fileSize?: string,
-   *   downloadPageUrl: string
+   *   downloadPageUrl: string,
+   *   lastUpdated?: string|null
    * }}
    */
   // eslint-disable-next-line no-unused-vars

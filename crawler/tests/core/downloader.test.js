@@ -94,4 +94,22 @@ describe('downloader – downloadBook', () => {
     expect(result).toBe(existingPath);
     expect(axiosMock.get).not.toHaveBeenCalled();
   });
+
+  test('overwrites existing file when meta.redownload is true', async () => {
+    // Pre-create a small "old" file
+    const existingPath = path.join(tempDir, 'txt520__99999.txt');
+    fs.writeFileSync(existingPath, Buffer.alloc(512, 0x41));
+
+    // Site has a new 4 KB version
+    axiosMock.get.mockResolvedValue({ data: Buffer.alloc(4096, 0x42) });
+
+    const result = await downloadBook(
+      'http://example.com/dl.txt',
+      makeMeta({ redownload: true }),
+      tempDir
+    );
+
+    expect(axiosMock.get).toHaveBeenCalledTimes(1);
+    expect(fs.readFileSync(result).length).toBe(4096);
+  });
 });

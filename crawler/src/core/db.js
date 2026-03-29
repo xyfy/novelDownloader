@@ -35,10 +35,18 @@ function getDb(dbPath) {
       task_data     TEXT    DEFAULT NULL,      -- JSON metadata for the task
       retry_count   INTEGER NOT NULL DEFAULT 0,
       last_error    TEXT    DEFAULT NULL,
+      last_updated  TEXT    DEFAULT NULL,      -- ISO-8601 last-update time from the source site
       created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at    TEXT    NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrate: add last_updated to existing tables that pre-date this column.
+  try {
+    _db.exec('ALTER TABLE crawler_tasks ADD COLUMN last_updated TEXT DEFAULT NULL');
+  } catch (_) {
+    // Column already exists – safe to ignore.
+  }
 
   return _db;
 }
@@ -154,4 +162,79 @@ function close() {
   }
 }
 
-module.exports = { getDb, upsert, markDone, markFailed, resetToPending, getPending, getStatus, setTaskData, getTaskData, close };
+/**
+ * Seed a list-page URL, always resetting it to 'pending' so it is
+ * re-scraped on every run and any new or updated books are detected.
+ *
+ * @param {string} url
+ */
+function seedListPage(url) {
+  getDb().prepare(`
+    INSERT INTO crawler_tasks (url, task_type, status)
+    VALUES (?, 'list', 'pending')
+    ON CONFLICT(url) DO UPDATE SET status = 'pending', updated_at = datetime('now')
+  `).run(url);
+}
+
+/**
+ * Insert a new task as 'pending', or conditionally reset an existing 'done'
+ * task back to 'pending' when the source site shows a newer last-update time.
+ *
+ * Behaviour:
+ *   - New URL → insert as 'pending' with the supplied lastUpdated.
+ *   - Existing row whose status is 'done' AND newLastUpdated is strictly newer
+ *     than the stored value → reset status to 'pending', update last_updated.
+ *   - All other cases → no change (idempotent, like the old upsert).
+ *
+ * @param {string}      url
+ * @param {string}      taskType        - 'detail' | 'download'
+ * @param {string|null} newLastUpdated  - ISO-8601 string from the source page, or null.
+ * @returns {boolean}  true if an existing 'done' row was reset to 'pending'.
+ */
+function upsertOrReschedule(url, taskType, newLastUpdated = null) {
+  const db = getDb();
+  const existing = db.prepare(
+    'SELECT status, last_updated FROM crawler_tasks WHERE url = ?'
+  ).get(url);
+
+  if (!existing) {
+    // Brand-new URL – insert as pending.
+    db.prepare(`
+      INSERT INTO crawler_tasks (url, task_type, status, last_updated)
+      VALUES (?, ?, 'pending', ?)
+    `).run(url, taskType, newLastUpdated || null);
+    return false;
+  }
+
+  // Only reset if the task is already done and the site shows a newer update.
+  if (
+    existing.status === 'done' &&
+    newLastUpdated &&
+    (!existing.last_updated || newLastUpdated > existing.last_updated)
+  ) {
+    db.prepare(`
+      UPDATE crawler_tasks
+      SET status = 'pending', last_updated = ?, updated_at = datetime('now')
+      WHERE url = ?
+    `).run(newLastUpdated, url);
+    return true; // was reset
+  }
+
+  return false;
+}
+
+/**
+ * Return the stored last_updated ISO-8601 string for a URL, or null.
+ * @param {string} url
+ * @returns {string|null}
+ */
+function getLastUpdated(url) {
+  const row = getDb().prepare('SELECT last_updated FROM crawler_tasks WHERE url = ?').get(url);
+  return row ? row.last_updated : null;
+}
+
+module.exports = {
+  getDb, upsert, markDone, markFailed, resetToPending, getPending, getStatus,
+  setTaskData, getTaskData, close,
+  seedListPage, upsertOrReschedule, getLastUpdated,
+};

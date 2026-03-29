@@ -115,3 +115,147 @@ describe('db – crawler_tasks CRUD', () => {
     expect(db.getTaskData('http://not-here.com')).toEqual({});
   });
 });
+
+// ── seedListPage ──────────────────────────────────────────────────────────────
+
+describe('db – seedListPage', () => {
+  let db;
+
+  beforeEach(() => {
+    jest.resetModules();
+    db = require('../../src/core/db');
+    db.getDb(require('path').join(require('os').tmpdir(), `novel-seed-${Date.now()}.db`));
+  });
+
+  afterEach(() => { db.close(); });
+
+  test('inserts a new list URL as pending', () => {
+    db.seedListPage('http://example.com/list/1');
+    expect(db.getStatus('http://example.com/list/1')).toBe('pending');
+  });
+
+  test('resets an already-done list URL back to pending', () => {
+    db.seedListPage('http://example.com/list/2');
+    db.markDone('http://example.com/list/2');
+    expect(db.getStatus('http://example.com/list/2')).toBe('done');
+
+    db.seedListPage('http://example.com/list/2');
+    expect(db.getStatus('http://example.com/list/2')).toBe('pending');
+  });
+
+  test('resets a failed list URL back to pending', () => {
+    db.seedListPage('http://example.com/list/3');
+    db.markFailed('http://example.com/list/3', 'err');
+    db.seedListPage('http://example.com/list/3');
+    expect(db.getStatus('http://example.com/list/3')).toBe('pending');
+  });
+});
+
+// ── upsertOrReschedule ────────────────────────────────────────────────────────
+
+describe('db – upsertOrReschedule', () => {
+  let db;
+
+  beforeEach(() => {
+    jest.resetModules();
+    db = require('../../src/core/db');
+    db.getDb(require('path').join(require('os').tmpdir(), `novel-uor-${Date.now()}.db`));
+  });
+
+  afterEach(() => { db.close(); });
+
+  test('inserts brand-new URL as pending and returns false', () => {
+    const reset = db.upsertOrReschedule('http://example.com/d/1', 'detail', '2024-01-01T00:00:00.000Z');
+    expect(reset).toBe(false);
+    expect(db.getStatus('http://example.com/d/1')).toBe('pending');
+  });
+
+  test('inserts with null lastUpdated and returns false', () => {
+    const reset = db.upsertOrReschedule('http://example.com/d/2', 'detail', null);
+    expect(reset).toBe(false);
+    expect(db.getStatus('http://example.com/d/2')).toBe('pending');
+  });
+
+  test('does not change a pending URL (returns false)', () => {
+    db.upsertOrReschedule('http://example.com/d/3', 'detail', '2024-01-01T00:00:00.000Z');
+    const reset = db.upsertOrReschedule('http://example.com/d/3', 'detail', '2025-01-01T00:00:00.000Z');
+    expect(reset).toBe(false);
+    expect(db.getStatus('http://example.com/d/3')).toBe('pending');
+  });
+
+  test('resets a done URL to pending when newLastUpdated is strictly newer', () => {
+    db.upsertOrReschedule('http://example.com/d/4', 'detail', '2024-01-01T00:00:00.000Z');
+    db.markDone('http://example.com/d/4');
+
+    const reset = db.upsertOrReschedule('http://example.com/d/4', 'detail', '2025-06-01T00:00:00.000Z');
+    expect(reset).toBe(true);
+    expect(db.getStatus('http://example.com/d/4')).toBe('pending');
+  });
+
+  test('does NOT reset a done URL when newLastUpdated equals stored value', () => {
+    const ts = '2024-03-15T10:00:00.000Z';
+    db.upsertOrReschedule('http://example.com/d/5', 'detail', ts);
+    db.markDone('http://example.com/d/5');
+
+    const reset = db.upsertOrReschedule('http://example.com/d/5', 'detail', ts);
+    expect(reset).toBe(false);
+    expect(db.getStatus('http://example.com/d/5')).toBe('done');
+  });
+
+  test('does NOT reset a done URL when newLastUpdated is older than stored', () => {
+    db.upsertOrReschedule('http://example.com/d/6', 'detail', '2025-01-01T00:00:00.000Z');
+    db.markDone('http://example.com/d/6');
+
+    const reset = db.upsertOrReschedule('http://example.com/d/6', 'detail', '2024-01-01T00:00:00.000Z');
+    expect(reset).toBe(false);
+    expect(db.getStatus('http://example.com/d/6')).toBe('done');
+  });
+
+  test('does NOT reset a done URL when newLastUpdated is null', () => {
+    db.upsertOrReschedule('http://example.com/d/7', 'detail', '2024-01-01T00:00:00.000Z');
+    db.markDone('http://example.com/d/7');
+
+    const reset = db.upsertOrReschedule('http://example.com/d/7', 'detail', null);
+    expect(reset).toBe(false);
+    expect(db.getStatus('http://example.com/d/7')).toBe('done');
+  });
+
+  test('resets a done URL when no lastUpdated was previously stored but a new one is provided', () => {
+    // Insert without a lastUpdated (simulates old data)
+    db.upsert('http://example.com/d/8', 'detail');
+    db.markDone('http://example.com/d/8');
+
+    const reset = db.upsertOrReschedule('http://example.com/d/8', 'detail', '2025-01-01T00:00:00.000Z');
+    expect(reset).toBe(true);
+    expect(db.getStatus('http://example.com/d/8')).toBe('pending');
+  });
+});
+
+// ── getLastUpdated ────────────────────────────────────────────────────────────
+
+describe('db – getLastUpdated', () => {
+  let db;
+
+  beforeEach(() => {
+    jest.resetModules();
+    db = require('../../src/core/db');
+    db.getDb(require('path').join(require('os').tmpdir(), `novel-glu-${Date.now()}.db`));
+  });
+
+  afterEach(() => { db.close(); });
+
+  test('returns null for unknown URL', () => {
+    expect(db.getLastUpdated('http://not-here.com')).toBeNull();
+  });
+
+  test('returns null for URL inserted without lastUpdated', () => {
+    db.upsert('http://example.com/x/1', 'detail');
+    expect(db.getLastUpdated('http://example.com/x/1')).toBeNull();
+  });
+
+  test('returns the ISO string stored via upsertOrReschedule', () => {
+    const ts = '2025-03-01T08:00:00.000Z';
+    db.upsertOrReschedule('http://example.com/x/2', 'detail', ts);
+    expect(db.getLastUpdated('http://example.com/x/2')).toBe(ts);
+  });
+});

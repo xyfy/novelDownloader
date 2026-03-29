@@ -31,8 +31,9 @@ async function downloadBook(downloadUrl, meta, pendingDir) {
   const txtPath = path.join(pendingDir, fileName);
   const metaPath = path.join(pendingDir, metaFileName);
 
-  // Skip if already downloaded
-  if (fs.existsSync(txtPath)) {
+  // Skip if already downloaded, unless this is a re-download triggered by a
+  // newer last-update timestamp detected on the source site.
+  if (fs.existsSync(txtPath) && !meta.redownload) {
     logger.info('skip_existing', { file: fileName });
     return txtPath;
   }

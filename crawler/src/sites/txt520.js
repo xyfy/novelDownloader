@@ -10,6 +10,30 @@ const RE_BOOK_HREF = /\/\w+\/\d+\.html$/;
 const RE_NUMERIC_ID = /^\d+$/;
 
 /**
+ * Parse a raw date/time string scraped from the site into an ISO-8601 string.
+ * Accepts formats like "2024-01-15", "2024/01/15 12:30", "2024年01月15日", etc.
+ *
+ * @param {string} raw
+ * @returns {string|null}  ISO-8601 string, or null if parsing fails.
+ */
+function _parseUpdateTime(raw) {
+  if (!raw) return null;
+  // Strip leading labels like "更新时间：" or "最后更新："
+  const cleaned = raw.replace(/^[\s\S]*?[：:]\s*/, '').trim();
+  // Match YYYY[sep]MM[sep]DD [HH:MM[:SS]]
+  const m = cleaned.match(
+    /(\d{4})[^\d](\d{1,2})[^\d](\d{1,2})(?:[^\d](\d{1,2})[^\d](\d{1,2}))?/
+  );
+  if (!m) return null;
+  const [, year, month, day, hour = '00', min = '00'] = m;
+  const d = new Date(
+    `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}` +
+    `T${hour.padStart(2, '0')}:${min.padStart(2, '0')}:00Z`
+  );
+  return isNaN(d.getTime()) ? null : d.toISOString();
+}
+
+/**
  * Site adapter for txt520.org
  *
  * Link chain:
@@ -55,13 +79,14 @@ class Txt520Adapter extends BaseSiteAdapter {
   /**
    * @param {import('cheerio').CheerioAPI} $
    * @param {string} url
-   * @returns {{ id: string, detailUrl: string, title: string, category: string }[]}
+   * @returns {{ id: string, detailUrl: string, title: string, category: string, lastUpdated: string|null }[]}
    */
   parseListPage($, url) {
     const origin = new URL(url).origin;
     const items = [];
 
     // Each book row: <li> contains <a href="/{category}/{id}.html">title</a>
+    // Optionally a <span> or <em> inside the <li> holds the update date.
     $('ul.txt_list li, div.list_con li, .list_ul li, li').each((_, el) => {
       const a = $(el).find('a').first();
       const href = a.attr('href');
@@ -71,11 +96,17 @@ class Txt520Adapter extends BaseSiteAdapter {
       const idPart = parts[parts.length - 1].replace('.html', '');
       if (!RE_NUMERIC_ID.test(idPart)) return;
 
+      // Try to extract last-update time from a sibling element inside the <li>
+      const dateText = $(el).find('span.date, em.date, span.time, em.time, .update_time').first().text().trim()
+        || $(el).find('span, em').filter((__, e) => /\d{4}/.test($(e).text())).first().text().trim();
+      const lastUpdated = _parseUpdateTime(dateText);
+
       items.push({
         id: idPart,
         detailUrl: `${origin}${href}`,
         title: a.text().trim(),
         category: parts[0] || '',
+        lastUpdated,
       });
     });
 
@@ -85,7 +116,7 @@ class Txt520Adapter extends BaseSiteAdapter {
   /**
    * @param {import('cheerio').CheerioAPI} $
    * @param {string} url
-   * @returns {{ title, author, category, summary, fileSize, downloadPageUrl }}
+   * @returns {{ title, author, category, summary, fileSize, downloadPageUrl, lastUpdated: string|null }}
    */
   parseDetailPage($, url) {
     const origin = new URL(url).origin;
@@ -129,7 +160,17 @@ class Txt520Adapter extends BaseSiteAdapter {
       });
     }
 
-    return { title, author, category, summary, fileSize, downloadPageUrl };
+    // Last-update time: try several common element patterns used by Chinese novel sites
+    const lastUpdatedRaw = [
+      $('p:contains("更新时间")').first().text(),
+      $('p:contains("最后更新")').first().text(),
+      $('span.update_time, span.updatetime, .last-update').first().text(),
+      $('td:contains("更新时间")').first().text(),
+      $('li:contains("更新时间")').first().text(),
+    ].find(t => t.trim()) || '';
+    const lastUpdated = _parseUpdateTime(lastUpdatedRaw);
+
+    return { title, author, category, summary, fileSize, downloadPageUrl, lastUpdated };
   }
 
   /**

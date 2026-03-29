@@ -66,9 +66,9 @@ async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
   const listUrls = await adapter.getListPageUrls(seedUrl, pages);
   logger.info('list_pages_found', { count: listUrls.length });
 
-  // Seed list-page tasks
+  // Always re-seed list-page tasks so every run fetches fresh book listings.
   for (const url of listUrls) {
-    db.upsert(url, 'list');
+    db.seedListPage(url);
   }
 
   // ── Step 2: Scrape list pages → detail URLs ─────────────────────────────
@@ -83,8 +83,15 @@ async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
       const items = adapter.parseListPage($, url);
 
       for (const item of items) {
-        db.upsert(item.detailUrl, 'detail');
-        db.setTaskData(item.detailUrl, { id: item.id, title: item.title, category: item.category });
+        // Use upsertOrReschedule so that a book we already finished gets
+        // re-queued if the site reports a newer last-update timestamp.
+        db.upsertOrReschedule(item.detailUrl, 'detail', item.lastUpdated || null);
+        db.setTaskData(item.detailUrl, {
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          lastUpdated: item.lastUpdated || null,
+        });
       }
 
       db.markDone(url);
@@ -113,8 +120,20 @@ async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
         throw new Error('Could not find download page URL');
       }
 
-      // Store detail meta alongside download task
-      db.upsert(detail.downloadPageUrl, 'download');
+      // Store detail meta alongside download task.
+      // If the site's lastUpdated is newer than what we stored, reset the
+      // download task to 'pending' and flag it as a re-download so the
+      // downloader overwrites any existing file.
+      const wasReset = db.upsertOrReschedule(
+        detail.downloadPageUrl, 'download', detail.lastUpdated || null
+      );
+      if (wasReset) {
+        logger.info('book_updated', {
+          url,
+          title: detail.title,
+          lastUpdated: detail.lastUpdated,
+        });
+      }
       db.setTaskData(detail.downloadPageUrl, {
         siteId: adapter.siteId,
         sourceId: itemMeta.id || '',
@@ -123,6 +142,8 @@ async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
         author: detail.author || '',
         category: detail.category || itemMeta.category || '',
         fileSize: detail.fileSize || '',
+        lastUpdated: detail.lastUpdated || null,
+        redownload: wasReset,
       });
 
       db.markDone(url);
