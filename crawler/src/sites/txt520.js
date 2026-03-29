@@ -3,6 +3,7 @@
 const BaseSiteAdapter = require('./base');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { buildRequestOptions } = require('../core/http');
 
 // Regex patterns used across parser methods
 const RE_PAGINATION = /index_(\d+)\.html/;
@@ -58,7 +59,7 @@ class Txt520Adapter extends BaseSiteAdapter {
     const origin = base.origin;
 
     // Fetch page 1 to find total page count
-    const res = await axios.get(seedUrl, { timeout: 15000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const res = await axios.get(seedUrl, buildRequestOptions({ timeout: 15000 }));
     const $ = cheerio.load(res.data);
 
     // Pagination links like: /latest/index_47.html

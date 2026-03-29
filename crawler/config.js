@@ -11,6 +11,7 @@ module.exports = {
       seedUrl: 'https://www.txt520.org/latest/index_1.html',
       concurrency: parseInt(process.env.CRAWLER_CONCURRENCY, 10) || 2,
       requestIntervalMs: parseInt(process.env.CRAWLER_REQUEST_INTERVAL_MS, 10) || 3000,
+      requestIntervalMaxMs: parseInt(process.env.CRAWLER_REQUEST_INTERVAL_MAX_MS, 10) || 10000,
     },
   },
   dirs: {

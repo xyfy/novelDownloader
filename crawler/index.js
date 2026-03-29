@@ -61,6 +61,7 @@ async function main() {
     pages,
     concurrency: siteConfig.concurrency,
     intervalMs: siteConfig.requestIntervalMs,
+    maxIntervalMs: siteConfig.requestIntervalMaxMs,
     pendingDir,
   });
 }

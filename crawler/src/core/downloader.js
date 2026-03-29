@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 const db = require('./db');
+const { buildRequestOptions } = require('./http');
 
 // Minimum acceptable file size in bytes (files smaller than this are likely error pages)
 const MIN_FILE_SIZE_BYTES = 1024;
@@ -40,12 +41,11 @@ async function downloadBook(downloadUrl, meta, pendingDir) {
 
   fs.mkdirSync(pendingDir, { recursive: true });
 
-  const response = await axios.get(downloadUrl, {
+  const response = await axios.get(downloadUrl, buildRequestOptions({
     responseType: 'arraybuffer',
     maxRedirects: 10,
     timeout: 60000,
-    headers: { 'User-Agent': 'Mozilla/5.0' },
-  });
+  }));
 
   const buffer = Buffer.from(response.data);
 

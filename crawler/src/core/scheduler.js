@@ -6,6 +6,7 @@ const cheerio = require('cheerio');
 const db = require('./db');
 const { downloadBook } = require('./downloader');
 const logger = require('./logger');
+const { randomBetween, buildRequestOptions } = require('./http');
 
 const MAX_RETRIES = 3;
 
@@ -22,17 +23,13 @@ function sleep(ms) {
  *
  * @param {string} url
  * @param {number} retries
- * @param {number} intervalMs  - Base interval between requests.
+ * @param {number} intervalMs  - Base interval (also used as back-off base).
  * @returns {Promise<import('axios').AxiosResponse>}
  */
 async function fetchWithRetry(url, retries = MAX_RETRIES, intervalMs = 3000) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const res = await axios.get(url, {
-        timeout: 20000,
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        maxRedirects: 10,
-      });
+      const res = await axios.get(url, buildRequestOptions({ timeout: 20000, maxRedirects: 10 }));
       if (res.status !== 200) throw new Error(`HTTP ${res.status}`);
       return res;
     } catch (err) {
@@ -49,13 +46,15 @@ async function fetchWithRetry(url, retries = MAX_RETRIES, intervalMs = 3000) {
  *
  * @param {import('../sites/base')} adapter
  * @param {object} options
- * @param {number|string} options.pages        - Max list pages or 'all'.
- * @param {number}        options.concurrency  - Max concurrent requests.
- * @param {number}        options.intervalMs   - Milliseconds between requests.
- * @param {string}        options.pendingDir   - Target directory for txt files.
+ * @param {number|string} options.pages          - Max list pages or 'all'.
+ * @param {number}        options.concurrency    - Max concurrent requests.
+ * @param {number}        options.intervalMs     - Minimum milliseconds between requests (default 3000).
+ * @param {number}        [options.maxIntervalMs] - Maximum milliseconds between requests (default 10000).
+ * @param {string}        options.pendingDir     - Target directory for txt files.
  */
-async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
+async function run(adapter, { pages, concurrency, intervalMs, maxIntervalMs, pendingDir }) {
   const limit = pLimit(concurrency);
+  const delayMax = (maxIntervalMs != null && maxIntervalMs > intervalMs) ? maxIntervalMs : intervalMs;
 
   const stats = { downloaded: 0, failed: 0, skipped: 0 };
 
@@ -100,7 +99,7 @@ async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
       db.markFailed(url, err.message);
       logger.error('list_page_failed', { url, error: err.message });
     }
-    await sleep(intervalMs);
+    await sleep(randomBetween(intervalMs, delayMax));
   })));
 
   // ── Step 3: Scrape detail pages → download-jump URLs ───────────────────
@@ -153,7 +152,7 @@ async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
       logger.error('detail_page_failed', { url, error: err.message });
       stats.failed++;
     }
-    await sleep(intervalMs);
+    await sleep(randomBetween(intervalMs, delayMax));
   })));
 
   // ── Step 4: Download txt files ──────────────────────────────────────────
@@ -189,7 +188,7 @@ async function run(adapter, { pages, concurrency, intervalMs, pendingDir }) {
       logger.error('book_download_failed', { url, error: err.message });
       stats.failed++;
     }
-    await sleep(intervalMs);
+    await sleep(randomBetween(intervalMs, delayMax));
   })));
 
   // ── Summary ─────────────────────────────────────────────────────────────

@@ -200,9 +200,18 @@ chardet 对 GB2312/GBK 混合文件有时置信度低。`encoding_detector.py` �
 `novel_parser.py` 使用三组正则，自动选命中率最高的。若有问题，检查正则是否覆盖该书的章节格式并提 Issue。
 
 **Q: IP 被封**
-- 请求间隔默认 3 秒（`CRAWLER_REQUEST_INTERVAL_MS=3000`）
+- 每次请求等待随机延迟（默认 3–10 秒），同时轮换 User-Agent，模拟真实浏览器行为。
 - 并发默认 2（`CRAWLER_CONCURRENCY=2`）
-- 如遇封锁，可增大间隔或减小并发。
+- 如遇封锁，可增大间隔或减小并发：
+  ```bash
+  CRAWLER_REQUEST_INTERVAL_MS=5000      # 最短等待 5 秒
+  CRAWLER_REQUEST_INTERVAL_MAX_MS=15000 # 最长等待 15 秒
+  CRAWLER_CONCURRENCY=1
+  ```
+- 如需使用代理（HTTP/HTTPS），在 `.env` 中设置：
+  ```bash
+  CRAWLER_PROXY=http://user:pass@proxy.example.com:8080
+  ```
 
 **Q: 中断后如何续跑**
 直接重新运行命令即可。爬虫通过 SQLite `crawler_tasks` 表记录状态；解析层通过 MySQL `parse_status` 字段跳过已处理的书。
