@@ -15,11 +15,15 @@ parser/__pycache__/
 parser/src/__pycache__/
 parser/models/__pycache__/
 parser/scripts/__pycache__/
+parser/tests/__pycache__/
 *.egg-info/
 dist/
 build/
 .venv/
 venv/
+
+# Pytest
+.pytest_cache/
 
 # Data (downloaded files and SQLite DB)
 data/downloads/pending/*.txt

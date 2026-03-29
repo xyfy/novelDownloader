@@ -121,7 +121,37 @@ python main.py --once
 
 ---
 
-## 常见问题
+## 测试
+
+### 爬虫单元测试（Node.js / Jest）
+
+```bash
+cd crawler
+npm install
+npm test
+```
+
+覆盖范围：
+- `tests/core/db.test.js` — SQLite 任务 CRUD（upsert / markDone / markFailed / resume）
+- `tests/core/downloader.test.js` — 文件下载（大小校验、跳过已存在文件、meta.json 写入）
+- `tests/core/siteRegistry.test.js` — 站点注册表（getAdapter / listSites）
+- `tests/sites/txt520.test.js` — txt520 适配器（parseListPage / parseDetailPage / parseDownloadPage）
+
+### 解析层单元测试（Python / pytest）
+
+```bash
+pip install -r parser/requirements.txt
+pytest
+```
+
+覆盖范围：
+- `parser/tests/test_encoding_detector.py` — UTF-8/BOM/GBK 编码检测
+- `parser/tests/test_novel_parser.py` — 章节切割（中文序数 / 数字编号 / 特殊章名 / 无章节兜底）
+- `parser/tests/test_text_cleaner.py` — 文本清洗（BOM 去除 / 换行规范化 / 广告过滤 / 空行折叠）
+
+---
+
+
 
 **Q: 编码检测不准**
 chardet 对 GB2312/GBK 混合文件有时置信度低。`encoding_detector.py` 已内置枚举兜底，顺序为 `utf-8-sig → utf-8 → gbk → gb2312 → big5`。

@@ -62,7 +62,7 @@ class Book(Base):
     )
     total_words: Mapped[Optional[int]] = mapped_column(Integer)
     first_seen_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
     )
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     parsed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -106,7 +106,7 @@ class ParseLog(Base):
     detected_encoding: Mapped[Optional[str]] = mapped_column(VARCHAR(20))
     parse_duration_ms: Mapped[Optional[int]] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
     )
 
     book: Mapped[Optional["Book"]] = relationship("Book", back_populates="parse_logs")
