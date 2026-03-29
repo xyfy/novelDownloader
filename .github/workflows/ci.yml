@@ -1,0 +1,167 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+# Restrict the default GITHUB_TOKEN to read-only for all jobs.
+# Individual jobs that need more can override this.
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 1: Crawler unit tests (Node.js / Jest) – no Docker, fast feedback
+  # ──────────────────────────────────────────────────────────────────────────
+  crawler-tests:
+    name: Crawler unit tests (Node.js)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: crawler/package.json
+
+      - name: Install dependencies
+        working-directory: crawler
+        run: npm install
+
+      - name: Run Jest tests
+        working-directory: crawler
+        run: npm test
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 2: Parser unit tests (Python / pytest) – no Docker, fast feedback
+  # ──────────────────────────────────────────────────────────────────────────
+  parser-tests:
+    name: Parser unit tests (Python)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: parser/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r parser/requirements.txt
+
+      - name: Run pytest
+        run: pytest
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job 3: Docker build + smoke test
+  #   • Builds crawler and parser images (both are behind the "full" profile)
+  #   • Starts MySQL, waits until it accepts connections, verifies the schema
+  #   • Smoke-tests the crawler image (node --check) and the parser image
+  #     (python import check) without making live HTTP requests
+  # ──────────────────────────────────────────────────────────────────────────
+  docker-build:
+    name: Docker build & smoke test
+    runs-on: ubuntu-latest
+    # Wait for unit tests so we don't waste Docker build time on broken code
+    needs: [crawler-tests, parser-tests]
+    permissions:
+      contents: read
+
+    env:
+      DB_NAME: novel_db
+      DB_USER: novel_user
+      DB_PASS: ci_password
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Build both application images ────────────────────────────────────
+      # crawler and parser are behind the "full" profile in docker-compose.yml
+      - name: Build Docker images
+        run: docker compose --profile full build
+
+      # ── Start MySQL and wait until it is ready ───────────────────────────
+      - name: Start MySQL
+        run: docker compose up -d mysql
+
+      - name: Wait for MySQL to be ready
+        run: |
+          echo "Waiting for MySQL to accept connections..."
+          for i in $(seq 1 30); do
+            if docker compose exec -T mysql \
+                mysqladmin ping -h localhost -u"$DB_USER" -p"$DB_PASS" \
+                --silent 2>/dev/null; then
+              echo "✅ MySQL ready after ${i} attempt(s)"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "❌ MySQL did not become ready in time"
+              docker compose logs mysql
+              exit 1
+            fi
+            echo "  attempt $i: not ready yet, retrying in 5s..."
+            sleep 5
+          done
+
+      # ── Verify the init.sql schema was applied ───────────────────────────
+      - name: Verify MySQL schema (init.sql)
+        run: |
+          TABLES=$(docker compose exec -T mysql \
+            mysql -u"$DB_USER" -p"$DB_PASS" "$DB_NAME" \
+            --batch --skip-column-names \
+            -e "SHOW TABLES;")
+          echo "Tables found: $TABLES"
+          echo "$TABLES" | grep -qw books    && echo "  ✅ books"
+          echo "$TABLES" | grep -qw chapters && echo "  ✅ chapters"
+          echo "$TABLES" | grep -qw parse_logs && echo "  ✅ parse_logs"
+
+      # ── Crawler image smoke test ─────────────────────────────────────────
+      # node --check parses every JS file without executing it, confirming
+      # there are no syntax errors and all require() paths resolve.
+      - name: Smoke-test crawler image
+        run: |
+          docker compose --profile full run --rm --no-deps \
+            -e SQLITE_PATH=/tmp/ci_test.db \
+            -e PENDING_DIR=/tmp/pending \
+            crawler \
+            node --check index.js
+          echo "✅ Crawler image: node --check passed"
+
+      # ── Parser image smoke test ──────────────────────────────────────────
+      # Import the three pure-logic modules (no DB connection required).
+      - name: Smoke-test parser image
+        run: |
+          docker compose --profile full run --rm --no-deps \
+            -e DB_HOST=mysql \
+            -e DB_PORT=3306 \
+            -e DB_NAME=novel_db \
+            -e DB_USER=novel_user \
+            -e DB_PASS=ci_password \
+            -e PENDING_DIR=/tmp/pending \
+            -e PROCESSING_DIR=/tmp/processing \
+            -e DONE_DIR=/tmp/done \
+            -e FAILED_DIR=/tmp/failed \
+            parser \
+            python -c "
+          from parser.src.encoding_detector import detect, read_text
+          from parser.src.novel_parser import split_chapters
+          from parser.src.text_cleaner import clean, is_valid_content
+          print('✅ Parser image: all core modules import successfully')
+          "
+
+      # ── Tear down ────────────────────────────────────────────────────────
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
