@@ -1,0 +1,31 @@
+{
+  "name": "novel-crawler",
+  "version": "1.0.0",
+  "description": "Novel web crawler - Node.js layer",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "lint": "eslint .",
+    "test": "jest --testPathPatterns=tests/ --forceExit"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "clearMocks": true,
+    "restoreMocks": true
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "better-sqlite3": "^11.10.0",
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "p-limit": "^3.1.0",
+    "winston": "^3.13.0"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "jest": "^30.3.0"
+  }
+}

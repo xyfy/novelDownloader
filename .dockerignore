@@ -1,0 +1,9 @@
+.git
+.env
+.gitignore
+crawler/
+sql/
+data/
+pytest.ini
+README.md
+docker-compose.yml
