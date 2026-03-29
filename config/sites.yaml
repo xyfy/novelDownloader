@@ -1,0 +1,58 @@
+# Novel Downloader - Site Configurations
+# Add new site entries here to support additional sources.
+
+sites:
+  - name: txt520
+    base_url: https://www.txt520.org
+    list_url: https://www.txt520.org/latest/index.html
+
+    # CSS selector for novel links on the list/index page.
+    # Should match <a> elements whose href leads to a novel detail page.
+    novel_link_selector: "div.novelslist2 li a, ul.list li a, table.grid td a, .novellist a"
+
+    # CSS selector on the novel detail page for the TXT download link.
+    # Should match the <a> element whose href is the .txt file URL.
+    txt_download_selector: "a[href$='.txt'], a.download, .download-btn a"
+
+    # Encoding used by the downloaded TXT files (common values: utf-8, gbk, gb2312).
+    txt_encoding: gbk
+
+    # Optional: pagination for the list page.
+    # Set url_pattern with a {page} placeholder and the range of pages to crawl.
+    # Leave as null/empty to crawl only the list_url (single page).
+    list_pagination:
+      url_pattern: null   # e.g. "https://www.txt520.org/latest/index_{page}.html"
+      start_page: 1
+      max_pages: 1
+
+    # HTTP request headers used for all requests to this site.
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "zh-CN,zh;q=0.9,en;q=0.8"
+
+    # Regex pattern that matches the start of a chapter heading line inside the TXT.
+    # Capture group 1 (optional) is the full chapter title.
+    # Default covers common Chinese patterns: 第X章/节/回, or purely numeric headings.
+    chapter_pattern: "^(第[\\d零一二三四五六七八九十百千万]+[章节回]\\s*.*|第[\\d]+章.*)$"
+
+    # Maximum number of lines to scan at the start of the TXT for the title.
+    title_search_lines: 5
+
+  # ── Template for a second site ─────────────────────────────────────────────
+  # Uncomment and fill in the values to add another source.
+  #
+  # - name: example_site
+  #   base_url: https://example.com
+  #   list_url: https://example.com/latest/
+  #   novel_link_selector: ".booklist a"
+  #   txt_download_selector: "a.txt-download"
+  #   txt_encoding: utf-8
+  #   list_pagination:
+  #     url_pattern: "https://example.com/latest/?page={page}"
+  #     start_page: 1
+  #     max_pages: 5
+  #   headers:
+  #     User-Agent: "Mozilla/5.0 ..."
+  #   chapter_pattern: "^(第[\\d]+章.*)$"
+  #   title_search_lines: 5

@@ -1,0 +1,3 @@
+"""
+novelDownloader — package init.
+"""
